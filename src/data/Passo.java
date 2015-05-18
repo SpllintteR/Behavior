@@ -1,4 +1,4 @@
-package dev;
+package data;
 
 public enum Passo {
 
