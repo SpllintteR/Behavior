@@ -1,5 +1,8 @@
 package business;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import robot.Robo;
 import data.ArvorePassos;
 import data.Passo;
@@ -13,11 +16,16 @@ public class BehaviorRobot {
 	private boolean ultimoPassoErro = false;
 	private Robo robo;
 	private Arbitrator arb;
+	private final List<Passo> possibilidades = new ArrayList<>();
+	private final boolean recalcularPossibilidades = true;
+	private boolean fim;
+	protected boolean mapeandoBifurcacoes;
+	private StepNode checkPoint;
 
 	public void execute() throws Exception {
-		Behavior andarParaFrente = new Behavior() {
+		Behavior caminhoUnico = new Behavior() {
 			public boolean takeControl() {
-				return !robo.caminhoBloqueado(true) && !ultimoPassoErro;
+				return getPossibilidades() == 1;
 			}
 
 			public void suppress() {
@@ -25,13 +33,14 @@ public class BehaviorRobot {
 			}
 
 			public void action() {
-				frente();
+				caminhar(possibilidades.get(0));
+				proximoPasso();
 			}
 		};
 
-		Behavior mudarDirecao = new Behavior() {
+		Behavior bifurcacao = new Behavior() {
 			public boolean takeControl() {
-				return robo.caminhoBloqueado(true) || ultimoPassoErro;
+				return getPossibilidades() > 1;
 			}
 
 			public void suppress() {
@@ -40,78 +49,94 @@ public class BehaviorRobot {
 			}
 
 			public void action() {
-				Passo p = null;
-				p = encontraNovoCaminho();
-				System.out.println("nova direcao " + p);
-				if (p == Passo.FRENTE) {
-					frente();
-				} else if (p == Passo.DIREITA) {
-					direita();
-				} else {
-					if (p == Passo.ESQUERDA) {
-						esquerda();
-					} else {
-						if(robo.acabou()){
-							acabou();
-						}else{
-							tras();
-						}
-					}
+				for(int i = 1; i < possibilidades.size(); i++){
+					StepNode node = new StepNode(possibilidades.get(i));
+					node.setBifurcacao(true);
+					lastNode.addNode(node);
 				}
-			}
-
-			private Passo encontraNovoCaminho() {
-				if (caminhoLivre(Passo.FRENTE)
-						&& (lastNode.stepSucess(Passo.FRENTE))) {
-					return Passo.FRENTE;
-				} else {
-					if (caminhoLivre(Passo.DIREITA)
-							&& (lastNode.stepSucess(Passo.DIREITA))) {
-						return Passo.DIREITA;
-					} else {
-						if (caminhoLivre(Passo.ESQUERDA)
-								&& (lastNode.stepSucess(Passo.ESQUERDA))) {
-							return Passo.ESQUERDA;
-						} else {
-							return Passo.TRAS;
-						}
-					}
-				}
-			}
-
-			private boolean caminhoLivre(final Passo p) {
-				boolean result = false;
-				if (p == Passo.FRENTE) {
-					result = robo.caminhoBloqueado(true);
-				} else {
-					if (p == Passo.DIREITA) {
-						result = cabecaDireita();
-					} else {
-						result = cabecaEsquerda();
-					}
-				}
-				return !result;
+				caminhar(possibilidades.get(0));
+				proximoPasso();
 			}
 		};
 
-		Behavior stop = new Behavior() {
+		Behavior voltar = new Behavior() {
 			public boolean takeControl() {
-				//								return Button.ESCAPE.isDown();
-				return false;
+				return (getPossibilidades() == 0) && !estaNoFim() && !lastNode.equals(checkPoint);
 			}
 
 			public void suppress() {
-				robo.parar();
 			}
 
 			public void action() {
-				robo.parar();
-				throw new RuntimeException("a");
+
+				caminhar(Passo.TRAS);
+				proximoPasso();
 			}
 		};
 
-		Behavior[] bArray = { andarParaFrente, mudarDirecao, stop };
+		Behavior fimFaltaMapear = new Behavior(){
+			public boolean takeControl() {
+				return (getPossibilidades() == 0) && estaNoFim() && temNoComBifurcacao();
+			}
+
+			public void suppress() {
+			}
+
+			public void action() {
+				mapeandoBifurcacoes = true;
+				voltarAteBifurcacao();
+				proximoPasso();
+			}
+		};
+
+		Behavior fimMapeouTudo = new Behavior(){
+			public boolean takeControl() {
+				return (getPossibilidades() == 0) && estaNoFim() && !temNoComBifurcacao();
+			}
+
+			public void suppress() {
+			}
+
+			public void action() {
+				arb.stop();
+				Passo[] menorCaminho = djistra();
+				sendByBluetooth(menorCaminho);
+			}
+		};
+
+		Behavior[] bArray = { caminhoUnico, bifurcacao, voltar, fimFaltaMapear, fimMapeouTudo};
 		arb = (new Arbitrator(bArray)).start();
+	}
+
+	private Passo preenchePossibilidades() {
+		if (caminhoLivre(Passo.FRENTE)
+				&& (lastNode.naoMapeado(Passo.FRENTE))) {
+			possibilidades.add(Passo.FRENTE);
+		}
+		if (caminhoLivre(Passo.DIREITA)
+				&& (lastNode.naoMapeado(Passo.DIREITA))
+				&& !(lastNode.getParent().equals(Passo.DIREITA))) {
+			possibilidades.add(Passo.DIREITA);
+		}
+		if (caminhoLivre(Passo.ESQUERDA)
+				&& (lastNode.naoMapeado(Passo.ESQUERDA))
+				&& !(lastNode.getParent().equals(Passo.ESQUERDA))) {
+			possibilidades.add(Passo.ESQUERDA);
+		}
+	}
+
+	private boolean caminhoLivre(final Passo p) {
+		boolean result = false;
+		if (p == Passo.FRENTE) {
+			result = robo.caminhoBloqueado(true);
+		} else {
+			if (p == Passo.DIREITA) {
+				result = cabecaDireita();
+			} else {
+				result = cabecaEsquerda();
+			}
+		}
+		return !result;
 	}
 
 	private boolean cabecaEsquerda() {
@@ -131,13 +156,40 @@ public class BehaviorRobot {
 	}
 
 	private void updateTree(final Passo passo) {
-		StepNode node = new StepNode(passo);
+		StepNode node;
 		if(lastNode == null){
+			node = new StepNode(passo);
 			passos.addNode(node);
 		}else{
-			lastNode.addNode(node);
+			node = lastNode.getChild(passo);
+			if(node == null){
+				node = new StepNode(passo);
+				lastNode.addNode(node);
+			}else{
+				node.setBifurcacao(false);
+			}
 		}
 		lastNode = node;
+	}
+
+	private void caminhar(final Passo p) {
+		caminhar(p, false);
+	}
+
+	private void caminhar(final Passo p, final boolean encontrarBifurcacao){
+		switch (p) {
+		case FRENTE:
+			frente();
+			break;
+		case DIREITA:
+			direita(encontrarBifurcacao);
+			break;
+		case ESQUERDA:
+			esquerda(encontrarBifurcacao);
+			break;
+		case TRAS:
+			tras(encontrarBifurcacao);
+		}
 	}
 
 	private void frente() {
@@ -146,28 +198,94 @@ public class BehaviorRobot {
 		ultimoPassoErro = false;
 	}
 
-	private void esquerda() {
+	private void esquerda(final boolean encontrarBifurcacao) {
 		robo.esquerda();
-		updateTree(Passo.ESQUERDA);
-		ultimoPassoErro = false;
+		if(encontrarBifurcacao){
+			lastNode = lastNode.getParent();
+		}else{
+			updateTree(Passo.ESQUERDA);
+			ultimoPassoErro = false;
+		}
 	}
 
-	private void direita() {
+	private void direita(final boolean encontrarBifurcacao) {
 		robo.direita();
-		updateTree(Passo.DIREITA);
-		ultimoPassoErro = false;
+		if(encontrarBifurcacao){
+			lastNode = lastNode.getParent();
+		}else{
+			updateTree(Passo.DIREITA);
+			ultimoPassoErro = false;
+		}
 	}
 
-	private void tras() {
+	private void tras(final boolean encontrarBifurcacao) {
 		robo.tras();
-		lastNode.setSucess(false);
+		if(!encontrarBifurcacao){
+			lastNode.setSucess(false);
+			ultimoPassoErro = true;
+		}
 		lastNode = lastNode.getParent();
-		ultimoPassoErro = true;
 	}
 
 	private void acabou() {
 		arb.stop();
-		Passo[] passos = djistra();
-		sendByBluetooth(passos);
+		Passo[] menorCaminho = djistra();
+		sendByBluetooth(menorCaminho);
+	}
+
+	private void sendByBluetooth(final Passo[] menorCaminho) {
+		// TODO
+	}
+
+	private Passo[] djistra() {
+		//TODO:
+		return null;
+	}
+
+	private void proximoPasso() {
+		possibilidades.clear();
+		recalcularPossibilidades = true;
+	}
+
+	private synchronized int getPossibilidades() {
+		if(recalcularPossibilidades){
+			preenchePossibilidades();
+			recalcularPossibilidades = false;
+		}
+		return possibilidades.size();
+	}
+
+	private boolean estaNoFim(){
+		//TODO: ler cor vermelha/verde/sei lá a cor do fim
+	}
+
+	private boolean temNoComBifurcacao(){
+		for(int i = 0; i < passos.getRootNodeCount(); i++){
+			if (passos.getRootNode(i).isBifurcacao()){
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void voltarAteBifurcacao(){
+		do{
+			Passo p = encontrarPassoInverso();
+			caminhar(p, true);
+		} while (lastNode.isBifurcacao());
+		checkPoint = lastNode;
+	}
+
+	private Passo encontrarPassoInverso() {
+		switch (lastNode.getPasso()) {
+		case FRENTE:
+			return Passo.TRAS;
+		case DIREITA:
+			return Passo.ESQUERDA;
+		case ESQUERDA:
+			return Passo.DIREITA;
+		case TRAS:
+			return Passo.FRENTE;//NUNCA DEVERIA PASSAR AQUI
+		}
 	}
 }

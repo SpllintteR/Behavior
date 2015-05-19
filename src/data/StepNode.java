@@ -8,9 +8,28 @@ public class StepNode {
 	private boolean sucess = true;
 	private StepNode parent;
 	private final Passo passo;
+	private boolean bifurcacao = false;
 
 	public StepNode(final Passo passo) {
 		this.passo = passo;
+	}
+
+	public boolean isBifurcacao() {
+		if (bifurcacao){
+			return true;
+		}else{
+			for (StepNode stepNode : steps) {
+				if(stepNode.isBifurcacao()){
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+
+	public void setBifurcacao(final boolean bifurcacao) {
+		this.bifurcacao = bifurcacao;
 	}
 
 	public StepNode getStep(final int i){
@@ -45,13 +64,22 @@ public class StepNode {
 		return passo;
 	}
 
-	public boolean stepSucess(final Passo passo) {
+	public boolean naoMapeado(final Passo passo) {
 		for (StepNode stepNode : steps) {
 			if(stepNode.getPasso().equals(passo)){
-				return stepNode.isSucess();
+				return stepNode.isBifurcacao();
 			}
 		}
 		return true;
+	}
+
+	public StepNode getChild(final Passo passo) {
+		for (StepNode stepNode : steps) {
+			if(stepNode.getPasso().equals(passo)){
+				return stepNode;
+			}
+		}
+		return null;
 	}
 
 }
