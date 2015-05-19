@@ -1,8 +1,14 @@
 package robot;
 
+import lejos.nxt.LightSensor;
+import lejos.nxt.Motor;
+import lejos.nxt.SensorPort;
+import lejos.nxt.UltrasonicSensor;
+
 public class NXRobot implements Robo{
 
 	private final UltrasonicSensor distancia = new UltrasonicSensor(SensorPort.S1);
+	private final LightSensor sensorLuminosidade = new LightSensor(SensorPort.S2);
 	private final int CURVA = 270;
 	private final int FRENTE = -150;
 	private final int CABECA = 90;
@@ -55,5 +61,10 @@ public class NXRobot implements Robo{
 	@Override
 	public void olharDireita() {
 		Motor.B.rotate(CABECA);
+	}
+
+	@Override
+	public int getLightSensorValue() {
+		return sensorLuminosidade.getLightValue();
 	}
 }

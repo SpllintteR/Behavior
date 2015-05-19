@@ -92,7 +92,7 @@ public class StepNode {
 	}
 
 	public List<Passo> encontraCaminho(final List<Passo> passos) {
-		List<Passo> ret = new ArrayList<>();
+		List<Passo> ret = new ArrayList<Passo>();
 		if (isFim()){
 			ret.add(getPasso());
 			return ret;

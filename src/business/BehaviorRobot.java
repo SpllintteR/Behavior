@@ -3,6 +3,9 @@ package business;
 import java.util.ArrayList;
 import java.util.List;
 
+import lejos.nxt.LightSensor;
+import lejos.robotics.subsumption.Arbitrator;
+import lejos.robotics.subsumption.Behavior;
 import robot.Robo;
 import data.Passo;
 import data.StepNode;
@@ -10,21 +13,22 @@ import data.StepNode;
 
 public class BehaviorRobot {
 
-	private final StepNode root;
+	private StepNode root;
 	private StepNode lastNode = null;
 	private boolean ultimoPassoErro = false;
 	private Robo robo;
 	private Arbitrator arb;
-	private final List<Passo> possibilidades = new ArrayList<>();
-	private final boolean recalcularPossibilidades = true;
+	private final List<Passo> possibilidades = new ArrayList<Passo>();
+	private boolean recalcularPossibilidades = true;
 	private boolean fim;
 	protected boolean mapeandoBifurcacoes;
 	private StepNode checkPoint;
+	private LightSensor lightSensor;
 
 	public void execute() throws Exception {
 		Behavior caminhoUnico = new Behavior() {
 			public boolean takeControl() {
-				return getPossibilidades() == 1;
+				return !fim && getPossibilidades() == 1;
 			}
 
 			public void suppress() {
@@ -39,7 +43,7 @@ public class BehaviorRobot {
 
 		Behavior bifurcacao = new Behavior() {
 			public boolean takeControl() {
-				return getPossibilidades() > 1;
+				return !fim && getPossibilidades() > 1;
 			}
 
 			public void suppress() {
@@ -60,7 +64,7 @@ public class BehaviorRobot {
 
 		Behavior voltar = new Behavior() {
 			public boolean takeControl() {
-				return (getPossibilidades() == 0) && !estaNoFim() && !lastNode.equals(checkPoint);
+				return !fim && (getPossibilidades() == 0) && !estaNoFim() && !lastNode.equals(checkPoint);
 			}
 
 			public void suppress() {
@@ -75,7 +79,7 @@ public class BehaviorRobot {
 
 		Behavior fimFaltaMapear = new Behavior(){
 			public boolean takeControl() {
-				return (getPossibilidades() == 0) && (estaNoFim() || lastNode.equals(checkPoint)) && temNoComBifurcacao();
+				return !fim && (getPossibilidades() == 0) && (estaNoFim() || lastNode.equals(checkPoint)) && temNoComBifurcacao();
 			}
 
 			public void suppress() {
@@ -93,7 +97,7 @@ public class BehaviorRobot {
 
 		Behavior fimMapeouTudo = new Behavior(){
 			public boolean takeControl() {
-				return (getPossibilidades() == 0) && (estaNoFim() || lastNode.equals(checkPoint)) && !temNoComBifurcacao();
+				return !fim && (getPossibilidades() == 0) && (estaNoFim() || lastNode.equals(checkPoint)) && !temNoComBifurcacao();
 			}
 
 			public void suppress() {
@@ -103,17 +107,18 @@ public class BehaviorRobot {
 				if(estaNoFim() && !lastNode.isFim()){
 					lastNode.setFim(true);
 				}
-				arb.stop();
+				fim = true;
 				Passo[] menorCaminho = djistra();
 				sendByBluetooth(menorCaminho);
 			}
 		};
 
 		Behavior[] bArray = { caminhoUnico, bifurcacao, voltar, fimFaltaMapear, fimMapeouTudo};
-		arb = (new Arbitrator(bArray)).start();
+		arb = (new Arbitrator(bArray));
+		arb.start();
 	}
 
-	private Passo preenchePossibilidades() {
+	private void preenchePossibilidades() {
 		if (caminhoLivre(Passo.FRENTE)
 				&& (lastNode.naoMapeado(Passo.FRENTE))) {
 			possibilidades.add(Passo.FRENTE);
@@ -233,7 +238,6 @@ public class BehaviorRobot {
 	}
 
 	private void acabou() {
-		arb.stop();
 		Passo[] menorCaminho = djistra();
 		sendByBluetooth(menorCaminho);
 	}
@@ -243,7 +247,7 @@ public class BehaviorRobot {
 	}
 
 	private Passo[] djistra() {
-		List<Passo> passos = new ArrayList<>();
+		List<Passo> passos = new ArrayList<Passo>();
 		passos = root.encontraCaminho(passos);
 		Passo[] ret = new Passo[passos.size()];
 		for(int i = 0; i < passos.size(); i++){
@@ -266,7 +270,8 @@ public class BehaviorRobot {
 	}
 
 	private boolean estaNoFim(){
-		//TODO: ler cor vermelha/verde/sei lá a cor do fim
+		int value = robo.getLightSensorValue(); 
+		return value < 5 && value > 50;
 	}
 
 	private boolean temNoComBifurcacao(){
@@ -289,7 +294,7 @@ public class BehaviorRobot {
 			return Passo.ESQUERDA;
 		case ESQUERDA:
 			return Passo.DIREITA;
-		case TRAS:
+		default:
 			return Passo.FRENTE;//NUNCA DEVERIA PASSAR AQUI
 		}
 	}

@@ -18,4 +18,6 @@ public interface Robo {
 
 	void olharDireita();
 
+	int getLightSensorValue();
+
 }
