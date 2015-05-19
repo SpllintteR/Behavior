@@ -4,14 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 import robot.Robo;
-import data.ArvorePassos;
 import data.Passo;
 import data.StepNode;
 
 
 public class BehaviorRobot {
 
-	private final ArvorePassos passos = new ArvorePassos();
+	private final StepNode root;
 	private StepNode lastNode = null;
 	private boolean ultimoPassoErro = false;
 	private Robo robo;
@@ -76,13 +75,16 @@ public class BehaviorRobot {
 
 		Behavior fimFaltaMapear = new Behavior(){
 			public boolean takeControl() {
-				return (getPossibilidades() == 0) && estaNoFim() && temNoComBifurcacao();
+				return (getPossibilidades() == 0) && (estaNoFim() || lastNode.equals(checkPoint)) && temNoComBifurcacao();
 			}
 
 			public void suppress() {
 			}
 
 			public void action() {
+				if(estaNoFim() && !lastNode.isFim()){
+					lastNode.setFim(true);
+				}
 				mapeandoBifurcacoes = true;
 				voltarAteBifurcacao();
 				proximoPasso();
@@ -91,13 +93,16 @@ public class BehaviorRobot {
 
 		Behavior fimMapeouTudo = new Behavior(){
 			public boolean takeControl() {
-				return (getPossibilidades() == 0) && estaNoFim() && !temNoComBifurcacao();
+				return (getPossibilidades() == 0) && (estaNoFim() || lastNode.equals(checkPoint)) && !temNoComBifurcacao();
 			}
 
 			public void suppress() {
 			}
 
 			public void action() {
+				if(estaNoFim() && !lastNode.isFim()){
+					lastNode.setFim(true);
+				}
 				arb.stop();
 				Passo[] menorCaminho = djistra();
 				sendByBluetooth(menorCaminho);
@@ -159,7 +164,7 @@ public class BehaviorRobot {
 		StepNode node;
 		if(lastNode == null){
 			node = new StepNode(passo);
-			passos.addNode(node);
+			root = node;
 		}else{
 			node = lastNode.getChild(passo);
 			if(node == null){
@@ -238,8 +243,13 @@ public class BehaviorRobot {
 	}
 
 	private Passo[] djistra() {
-		//TODO:
-		return null;
+		List<Passo> passos = new ArrayList<>();
+		passos = root.encontraCaminho(passos);
+		Passo[] ret = new Passo[passos.size()];
+		for(int i = 0; i < passos.size(); i++){
+			ret[passos.size() - 1 - i] = passos.get(i);
+		}
+		return ret;
 	}
 
 	private void proximoPasso() {
@@ -260,12 +270,7 @@ public class BehaviorRobot {
 	}
 
 	private boolean temNoComBifurcacao(){
-		for(int i = 0; i < passos.getRootNodeCount(); i++){
-			if (passos.getRootNode(i).isBifurcacao()){
-				return true;
-			}
-		}
-		return false;
+		return root.isBifurcacao();
 	}
 
 	private void voltarAteBifurcacao(){

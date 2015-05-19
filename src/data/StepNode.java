@@ -1,5 +1,6 @@
 package data;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class StepNode {
@@ -9,9 +10,18 @@ public class StepNode {
 	private StepNode parent;
 	private final Passo passo;
 	private boolean bifurcacao = false;
+	private boolean fim = false;
 
 	public StepNode(final Passo passo) {
 		this.passo = passo;
+	}
+
+	public boolean isFim() {
+		return fim;
+	}
+
+	public void setFim(final boolean fim) {
+		this.fim = fim;
 	}
 
 	public boolean isBifurcacao() {
@@ -26,7 +36,6 @@ public class StepNode {
 		}
 		return false;
 	}
-
 
 	public void setBifurcacao(final boolean bifurcacao) {
 		this.bifurcacao = bifurcacao;
@@ -82,4 +91,24 @@ public class StepNode {
 		return null;
 	}
 
+	public List<Passo> encontraCaminho(final List<Passo> passos) {
+		List<Passo> ret = new ArrayList<>();
+		if (isFim()){
+			ret.add(getPasso());
+			return ret;
+		}
+
+		int i = 0;
+		while((passos.size() == 0) && (i < steps.size())){
+			List<Passo> list = steps.get(i).encontraCaminho(passos);
+			if((ret.size() == 0) || (list.size() < ret.size())){
+				ret = list;
+			}
+			i++;
+		}
+		if(ret.size() > 0){
+			ret.add(getPasso());
+		}
+		return ret;
+	}
 }
