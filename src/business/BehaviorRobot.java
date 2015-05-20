@@ -3,9 +3,9 @@ package business;
 import java.util.ArrayList;
 import java.util.List;
 
-import lejos.nxt.LightSensor;
 import lejos.robotics.subsumption.Arbitrator;
 import lejos.robotics.subsumption.Behavior;
+import robot.NXRobot;
 import robot.Robo;
 import data.Passo;
 import data.StepNode;
@@ -14,123 +14,136 @@ import data.StepNode;
 public class BehaviorRobot {
 
 	private StepNode root;
-	private StepNode lastNode = null;
+	private StepNode lastNode = new StepNode();
 	private boolean ultimoPassoErro = false;
-	private Robo robo;
+	private Robo robo = new NXRobot();
 	private Arbitrator arb;
 	private final List<Passo> possibilidades = new ArrayList<Passo>();
 	private boolean recalcularPossibilidades = true;
 	private boolean fim;
 	protected boolean mapeandoBifurcacoes;
 	private StepNode checkPoint;
-	private LightSensor lightSensor;
+	private boolean inAction = false;
 
 	public void execute() throws Exception {
 		Behavior caminhoUnico = new Behavior() {
 			public boolean takeControl() {
-				return !fim && getPossibilidades() == 1;
+				return !inAction && !fim && getPossibilidades() == 1;
 			}
 
 			public void suppress() {
-				//
 			}
 
 			public void action() {
+				inAction = true;
+				System.out.println(possibilidades.get(0));
 				caminhar(possibilidades.get(0));
 				proximoPasso();
+				inAction = false;
 			}
 		};
 
 		Behavior bifurcacao = new Behavior() {
 			public boolean takeControl() {
-				return !fim && getPossibilidades() > 1;
+				return !inAction && !fim && getPossibilidades() > 1;
 			}
 
 			public void suppress() {
-				//
-
 			}
 
 			public void action() {
+				inAction = true;
 				for(int i = 1; i < possibilidades.size(); i++){
 					StepNode node = new StepNode(possibilidades.get(i));
 					node.setBifurcacao(true);
 					lastNode.addNode(node);
 				}
+				System.out.println("bif - " + possibilidades.get(0));
 				caminhar(possibilidades.get(0));
 				proximoPasso();
+				inAction = false;
 			}
 		};
 
 		Behavior voltar = new Behavior() {
 			public boolean takeControl() {
-				return !fim && (getPossibilidades() == 0) && !estaNoFim() && !lastNode.equals(checkPoint);
+				return !inAction && !fim && (getPossibilidades() == 0) && !estaNoFim() && !lastNode.equals(checkPoint);
 			}
 
 			public void suppress() {
 			}
 
 			public void action() {
-
+				inAction = true;
 				caminhar(Passo.TRAS);
 				proximoPasso();
+				inAction = false;
 			}
 		};
 
 		Behavior fimFaltaMapear = new Behavior(){
 			public boolean takeControl() {
-				return !fim && (getPossibilidades() == 0) && (estaNoFim() || lastNode.equals(checkPoint)) && temNoComBifurcacao();
+				return !inAction && !fim && (getPossibilidades() == 0) && (estaNoFim() || lastNode.equals(checkPoint)) && temNoComBifurcacao();
 			}
 
 			public void suppress() {
 			}
 
 			public void action() {
+				inAction = true;
 				if(estaNoFim() && !lastNode.isFim()){
 					lastNode.setFim(true);
 				}
 				mapeandoBifurcacoes = true;
 				voltarAteBifurcacao();
 				proximoPasso();
+				inAction = false;
 			}
 		};
 
 		Behavior fimMapeouTudo = new Behavior(){
 			public boolean takeControl() {
-				return !fim && (getPossibilidades() == 0) && (estaNoFim() || lastNode.equals(checkPoint)) && !temNoComBifurcacao();
+				return !inAction && !fim && (getPossibilidades() == 0) && (estaNoFim() || lastNode.equals(checkPoint)) && !temNoComBifurcacao();
 			}
 
 			public void suppress() {
 			}
 
 			public void action() {
+				inAction = true;
 				if(estaNoFim() && !lastNode.isFim()){
 					lastNode.setFim(true);
 				}
 				fim = true;
 				Passo[] menorCaminho = djistra();
 				sendByBluetooth(menorCaminho);
+				inAction = false;
 			}
 		};
 
-		Behavior[] bArray = { caminhoUnico, bifurcacao, voltar, fimFaltaMapear, fimMapeouTudo};
-		arb = (new Arbitrator(bArray));
+		Behavior[] bArray = { voltar, bifurcacao, caminhoUnico, fimFaltaMapear, fimMapeouTudo};
+		arb = new Arbitrator(bArray);
 		arb.start();
 	}
 
-	private void preenchePossibilidades() {
+	private void preenchePossibilidades() throws InterruptedException {
 		if (caminhoLivre(Passo.FRENTE)
-				&& (lastNode.naoMapeado(Passo.FRENTE))) {
+				&& ((lastNode == null) || lastNode.naoMapeado(Passo.FRENTE))) {
 			possibilidades.add(Passo.FRENTE);
 		}
-		if (caminhoLivre(Passo.DIREITA)
-				&& (lastNode.naoMapeado(Passo.DIREITA))
-				&& !(lastNode.getParent().equals(Passo.DIREITA))) {
+		boolean caminhoLivre = caminhoLivre(Passo.DIREITA);
+		boolean naoMapeado = lastNode.naoMapeado(Passo.DIREITA);
+		if (caminhoLivre
+				&& (naoMapeado
+				&& (!Passo.DIREITA.equals(lastNode.getPasso())))) {
 			possibilidades.add(Passo.DIREITA);
 		}
-		if (caminhoLivre(Passo.ESQUERDA)
-				&& (lastNode.naoMapeado(Passo.ESQUERDA))
-				&& !(lastNode.getParent().equals(Passo.ESQUERDA))) {
+		
+		caminhoLivre = caminhoLivre(Passo.ESQUERDA);
+		naoMapeado = lastNode.naoMapeado(Passo.ESQUERDA);
+		if (caminhoLivre
+				&& (naoMapeado
+				&& (!Passo.ESQUERDA.equals(lastNode.getPasso())))) {
 			possibilidades.add(Passo.ESQUERDA);
 		}
 	}
@@ -216,6 +229,7 @@ public class BehaviorRobot {
 			updateTree(Passo.ESQUERDA);
 			ultimoPassoErro = false;
 		}
+		frente();
 	}
 
 	private void direita(final boolean encontrarBifurcacao) {
@@ -226,6 +240,7 @@ public class BehaviorRobot {
 			updateTree(Passo.DIREITA);
 			ultimoPassoErro = false;
 		}
+		frente();
 	}
 
 	private void tras(final boolean encontrarBifurcacao) {
@@ -258,20 +273,26 @@ public class BehaviorRobot {
 
 	private void proximoPasso() {
 		possibilidades.clear();
+		System.out.println("poss: " + possibilidades.size());
 		recalcularPossibilidades = true;
 	}
 
 	private synchronized int getPossibilidades() {
 		if(recalcularPossibilidades){
-			preenchePossibilidades();
+			try {
+				preenchePossibilidades();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 			recalcularPossibilidades = false;
 		}
 		return possibilidades.size();
 	}
 
 	private boolean estaNoFim(){
-		int value = robo.getLightSensorValue(); 
-		return value < 5 && value > 50;
+		int value = robo.getLightSensorValue();
+//		return value < 5 && value > 50;
+		return false;
 	}
 
 	private boolean temNoComBifurcacao(){

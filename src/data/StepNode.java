@@ -5,15 +5,19 @@ import java.util.List;
 
 public class StepNode {
 
-	private List<StepNode> steps;
+	private List<StepNode> steps = new ArrayList<StepNode>();
 	private boolean sucess = true;
 	private StepNode parent;
-	private final Passo passo;
+	private Passo passo;
 	private boolean bifurcacao = false;
 	private boolean fim = false;
 
 	public StepNode(final Passo passo) {
 		this.passo = passo;
+	}
+
+	public StepNode() {
+		// TODO Auto-generated constructor stub
 	}
 
 	public boolean isFim() {
@@ -67,6 +71,7 @@ public class StepNode {
 
 	public void addNode(final StepNode lastNode) {
 		steps.add(lastNode);
+		lastNode.setParent(this);
 	}
 
 	public Passo getPasso() {
@@ -75,7 +80,7 @@ public class StepNode {
 
 	public boolean naoMapeado(final Passo passo) {
 		for (StepNode stepNode : steps) {
-			if(stepNode.getPasso().equals(passo)){
+			if((stepNode.getPasso() != null) && stepNode.getPasso().equals(passo)){
 				return stepNode.isBifurcacao();
 			}
 		}
